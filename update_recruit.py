@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any
+from typing import Any, Dict
 
 from data import character_table
 
@@ -17,19 +17,20 @@ def get_recruit(name: str) -> Dict[str, Any]:
     c_dict = [item for item in character_table.values()
               if item['name'] == name][0]
 
+    rarity = int(c_dict["rarity"][-1])
     tags = []
     if c_dict['position'] == 'MELEE':
         tags.append('近战位')
     if c_dict['position'] == 'RANGED':
         tags.append('远程位')
-    if c_dict['rarity'] == 5:
+    if rarity == 6:
         tags.append('高级资深干员')
-    if c_dict['rarity'] == 4:
+    if rarity == 5:
         tags.append('资深干员')
     return {
         'name': name,
         'type': profession_mapping[c_dict['profession']],
-        'rarity': c_dict['rarity'] + 1,
+        'rarity': rarity,
         'tags': tags + c_dict['tagList']
     }
 
@@ -44,7 +45,7 @@ if __name__ == '__main__':
         json.dump(recruit_table, f, ensure_ascii=False, indent=4)
 
     # update
-    names = ['早露', '莱恩哈特', '波登可']
+    names = ['棘刺', '安哲拉', '蜜蜡', '贾维', '孑']
     for _name in names:
         print(json.dumps(get_recruit(_name), ensure_ascii=False, indent=4), end=',\n')
         recruit_table.append(get_recruit(_name))

@@ -1,16 +1,28 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import List
 
 from PIL import Image
+from typing_extensions import TypedDict, NotRequired
 
 from .extract_ab import extract_ab
 
 
+class Atlas(TypedDict):
+    image: Image.Image | None
+    alpha: Image.Image | None
+    composed: NotRequired[Image.Image]
+
+
 class PortraitHub:
+
     def __init__(self, hub: dict):
         self.name_to_atlas = {x['name']: x['atlas'] for x in hub['_sprites']}
         self.name_to_position = {}
-        self.atlas = [{'image': None, 'alpha': None} for _ in range(max(self.name_to_atlas.values()) + 1)]
+        self.atlas: list[Atlas] = [{
+            'image': None,
+            'alpha': None
+        } for _ in range(max(self.name_to_atlas.values()) + 1)]
 
     def add_atlas(self, atlas_name: str, image: Image.Image):
         if atlas_name.count('#') != 1:
@@ -21,7 +33,10 @@ class PortraitHub:
         else:
             key = 'image'
         idx = int(atlas_name.split('#')[-1])
-        self.atlas[idx][key] = image
+        try:
+            self.atlas[idx][key] = image
+        except IndexError as e:
+            print("IndexError: {} {}".format(idx, atlas_name))
 
     def add_position(self, name: str, position: dict):
         for x in position['_sprites']:
@@ -46,18 +61,24 @@ class PortraitHub:
             return composed
         return cached
 
-    def get_portrait(self, name: str):
+    def get_portrait(self, name: str) -> Image.Image:
         atlas_id = self.name_to_atlas[name]
-        image, alpha = self.atlas[atlas_id]['image'], self.atlas[atlas_id]['alpha']
+        image = self.atlas[atlas_id]['image']
+        alpha = self.atlas[atlas_id]['alpha']
         rect, rotate = self.name_to_position[name].values()
-        assert image is not None and alpha is not None
+        if image is None or alpha is None:
+            raise RuntimeError(
+                f'missing {"image" if image is None else "alpha"} for {name}')
         width, height = image.size
         w, h, x, y = rect['w'], rect['h'], rect['x'], rect['y']
-        cropped = self.compose(image, alpha).crop((x, height - y - h, x + w, height - y))
+        cropped = self.compose(image, alpha).crop(
+            (x, height - y - h, x + w, height - y))
         return cropped if not rotate else cropped.transpose(Image.ROTATE_270)
 
 
-def update_portrait(portrait_ab_dir: Path, output_dir: Path = Path('image/portrait')) -> List[str]:
+def update_portrait(
+        portrait_ab_dir: Path,
+        output_dir: Path = Path('image/portrait')) -> list[str]:
     portrait_ab_paths = list(portrait_ab_dir.glob('*.ab'))
     assert 'portrait_hub.ab' in [x.name for x in portrait_ab_paths]
     pack_paths = [x for x in portrait_ab_paths if x.name != 'portrait_hub.ab']
@@ -67,9 +88,11 @@ def update_portrait(portrait_ab_dir: Path, output_dir: Path = Path('image/portra
     _, hub_dict = list(extract_ab(str(hub_path), ['MonoBehaviour']))[0]
     hub = PortraitHub(hub_dict)
     for pack in pack_paths:
-        for reader, result in extract_ab(str(pack), ['Texture2D']):  # add image
+        # add image
+        for reader, result in extract_ab(str(pack), ['Texture2D']):
             hub.add_atlas(reader.read().name, result)
-        for reader, result in extract_ab(str(pack), ['MonoBehaviour']):  # add position data for crop
+        # add position data for crop
+        for reader, result in extract_ab(str(pack), ['MonoBehaviour']):
             hub.add_position(reader.read().name, result)
 
     existing = [x.stem for x in output_dir.glob('*.png')]

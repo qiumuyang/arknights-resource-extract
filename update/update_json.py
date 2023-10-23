@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import json
 import re
 from pathlib import Path
 from shutil import copyfile as copy
+
+from tqdm import tqdm
 
 OLD_CHAR_PATH = Path('excel/character_table.json')
 OLD_WORD_PATH = Path('excel/charword_table.json')
@@ -22,8 +26,10 @@ def update_json():
 
     diff = sorted(new_keys.difference(old_keys),
                   key=lambda s: int(re.search(r'\d+', s).group(0)))
-    diff = sorted(diff, key=lambda s: not s.startswith('char'))
-    key_name_list = [f"{key}\t{character_table_new[key]['name']}" for key in diff]
+    diff: list[str] = sorted(diff, key=lambda s: not s.startswith('char'))
+    key_name_list = [
+        f"{key:<35}{character_table_new[key]['name']}" for key in diff
+    ]
     msg = '\n'.join(key_name_list)
 
     if diff:
@@ -49,17 +55,36 @@ def download_json():
     urllib3.disable_warnings(InsecureRequestWarning)
 
     json_dir = Path('excel/new')
+    json_dir.mkdir(exist_ok=True)
+    old_dir = Path('excel/old')
+    old_dir.mkdir(exist_ok=True)
 
-    url1 = 'https://github.com/Kengxxiao/ArknightsGameData/raw/master/zh_CN/gamedata/excel/character_table.json'
-    url2 = 'https://github.com/Kengxxiao/ArknightsGameData/raw/master/zh_CN/gamedata/excel/charword_table.json'
+    # url1 = 'https://github.com/Kengxxiao/ArknightsGameData/raw/master/zh_CN/gamedata/excel/character_table.json'
+    # url2 = 'https://github.com/Kengxxiao/ArknightsGameData/raw/master/zh_CN/gamedata/excel/charword_table.json'
+    url1 = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/character_table.json"
+    url2 = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/charword_table.json"
 
     for url in [url1, url2]:
-        r = requests.get(url, proxies={'http': 'http://localhost:8001',
-                                       'https': 'http://localhost:8001'}, verify=False)
-        r.raise_for_status()
+        r = requests.get(url,
+                         proxies={
+                             'http': 'http://localhost:7890',
+                             'https': 'http://localhost:7890'
+                         },
+                         verify=False,
+                         stream=True)
         name = url.split('/')[-1]
+        total_size = int(r.headers.get('content-length', 0))
+        block_size = 1024 * 256 # 256KB
+        t = tqdm(total=total_size, unit='iB', unit_scale=True)
         with open(json_dir / name, 'wb') as f:
-            f.write(r.content)
+            for data in r.iter_content(block_size):
+                t.update(len(data))
+                f.write(data)
+        t.close()
+
+        existing = Path('excel') / name
+        if existing.exists():
+            copy(existing, old_dir / name)
 
 
 if __name__ == '__main__':

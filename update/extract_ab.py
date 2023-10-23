@@ -1,4 +1,4 @@
-from typing import List
+from __future__ import annotations
 
 import UnityPy
 from UnityPy import Environment
@@ -16,7 +16,7 @@ def mono_behaviour_extractor(obj: ObjectReader):
 
 def image_extractor(obj: ObjectReader):
     assert obj.type.name == 'Texture2D' or obj.type.name == 'Sprite'
-    return obj.read().image
+    return obj.read().image  # type: ignore
 
 
 extractor = {
@@ -41,7 +41,7 @@ def search(item):
     return ret
 
 
-def extract_ab(path: str, types: List[str]):
+def extract_ab(path: str, types: list[str]):
     env = UnityPy.load(path)
 
     for reader in env.objects:
